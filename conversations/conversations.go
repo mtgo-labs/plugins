@@ -169,6 +169,11 @@ func (p *Plugin) Start(ctx context.Context, client *tg.Client) error {
 				delete(p.active, ek)
 				p.mu.Unlock()
 			}()
+			defer func() {
+				if r := recover(); r != nil {
+					cc.client.Log.Errorf("conversation %q panic: %v", cc.name, r)
+				}
+			}()
 			fn(cc)
 		}(ek, fn, cc)
 	}
