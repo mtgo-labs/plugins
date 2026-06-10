@@ -87,7 +87,7 @@ func (p *Pluralizer) addBuiltInRules() {
 		if mod10 == 1 && mod100 != 11 {
 			return "one"
 		}
-		if mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14) {
+		if mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) {
 			return "few"
 		}
 		if mod10 == 0 || (mod10 >= 5 && mod10 <= 9) || (mod100 >= 11 && mod100 <= 14) {
@@ -107,7 +107,7 @@ func (p *Pluralizer) addBuiltInRules() {
 		}
 		mod10 := nAbs % 10
 		mod100 := nAbs % 100
-		if (mod10 >= 2 && mod10 <= 4) && !(mod100 >= 12 && mod100 <= 14) {
+		if (mod10 >= 2 && mod10 <= 4) && (mod100 < 12 || mod100 > 14) {
 			return "few"
 		}
 		if (mod10 != 1 && nAbs != 0) && (mod10 <= 1 || mod10 >= 5) {

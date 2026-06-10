@@ -34,7 +34,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -71,9 +71,9 @@ type Message struct {
 // Args carries template variables for translation calls, including count
 // (for pluralization), gender (for gendered variants), and named parameters.
 type Args struct {
-	Count   int
-	Gender  string
-	Params  map[string]any
+	Count  int
+	Gender string
+	Params map[string]any
 }
 
 // LocaleNegotiator determines the language tag to use for a given handler
@@ -345,9 +345,7 @@ func (t *Translator) Translate(ctx *tg.Context, key string, args ...any) string 
 	}
 	globals := make(map[string]any)
 	if t.globalCtx != nil {
-		for k, v := range t.globalCtx(ctx) {
-			globals[k] = v
-		}
+		maps.Copy(globals, t.globalCtx(ctx))
 	}
 	for k, v := range globals {
 		template = strings.ReplaceAll(template, "{"+k+"}", fmt.Sprintf("%v", v))

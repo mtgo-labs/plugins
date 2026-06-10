@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"maps"
 	"path"
 	"strings"
 
@@ -171,7 +172,5 @@ func (t *Translator) loadFTLLocked(lang language.Tag, content string) {
 	parser := NewFTLParser()
 	messages, _ := parser.Parse(content)
 	locale := t.getOrCreateLocale(lang)
-	for k, m := range messages {
-		locale.Messages[k] = m
-	}
+	maps.Copy(locale.Messages, messages)
 }

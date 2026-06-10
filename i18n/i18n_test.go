@@ -11,10 +11,13 @@ import (
 )
 
 func TestYAMLLoadAndT(t *testing.T) {
-	tr := NewTranslator(&Config{
+	tr, err := NewTranslator(&Config{
 		DefaultLang: language.English,
 		Format:      FormatYAML,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = tr.LoadYAML(language.English, []byte(`
 welcome: "Hello, {0}!"
 help: "Send me a message."
@@ -49,7 +52,10 @@ items_count:
 }
 
 func TestPluralization(t *testing.T) {
-	tr := NewTranslator(&Config{DefaultLang: language.English, Format: FormatYAML})
+	tr, err := NewTranslator(&Config{DefaultLang: language.English, Format: FormatYAML})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = tr.LoadYAML(language.English, []byte(`
 items_count:
   one: "You have {count} item."
@@ -65,7 +71,10 @@ items_count:
 }
 
 func TestNestedYAML(t *testing.T) {
-	tr := NewTranslator(&Config{DefaultLang: language.English, Format: FormatYAML})
+	tr, err := NewTranslator(&Config{DefaultLang: language.English, Format: FormatYAML})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = tr.LoadYAML(language.English, []byte(`
 menu:
   home: "Home"
@@ -78,7 +87,10 @@ menu:
 }
 
 func TestResolveLocaleFromUser(t *testing.T) {
-	tr := NewTranslator(&Config{DefaultLang: language.English})
+	tr, err := NewTranslator(&Config{DefaultLang: language.English})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = tr.LoadYAML(language.English, []byte(`hi: "Hi"`))
 	_ = tr.LoadYAML(language.German, []byte(`hi: "Hallo"`))
 	_ = tr.Start(context.Background(), &tg.Client{})
@@ -95,7 +107,10 @@ func TestResolveLocaleFromUser(t *testing.T) {
 }
 
 func TestResolveLocaleFallback(t *testing.T) {
-	tr := NewTranslator(&Config{DefaultLang: language.English})
+	tr, err := NewTranslator(&Config{DefaultLang: language.English})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = tr.LoadYAML(language.English, []byte(`hi: "Hi"`))
 	_ = tr.Start(context.Background(), &tg.Client{})
 
@@ -111,7 +126,10 @@ func TestResolveLocaleFallback(t *testing.T) {
 }
 
 func TestCustomNegotiator(t *testing.T) {
-	tr := NewTranslator(&Config{DefaultLang: language.English})
+	tr, err := NewTranslator(&Config{DefaultLang: language.English})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = tr.LoadYAML(language.English, []byte(`hi: "Hi"`))
 	_ = tr.LoadYAML(language.French, []byte(`hi: "Salut"`))
 	tr.WithNegotiator(func(ctx *tg.Context) language.Tag { return language.French })
@@ -142,7 +160,10 @@ func (m *mockSession) SetLocale(userID int64, locale string) error {
 }
 
 func TestSessionStore(t *testing.T) {
-	tr := NewTranslator(&Config{DefaultLang: language.English})
+	tr, err := NewTranslator(&Config{DefaultLang: language.English})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = tr.LoadYAML(language.English, []byte(`hi: "Hi"`))
 	_ = tr.LoadYAML(language.German, []byte(`hi: "Hallo"`))
 	tr.WithSession(&mockSession{locales: map[int64]string{1: "de"}})
@@ -160,7 +181,10 @@ func TestSessionStore(t *testing.T) {
 }
 
 func TestTranslate(t *testing.T) {
-	tr := NewTranslator(&Config{DefaultLang: language.English})
+	tr, err := NewTranslator(&Config{DefaultLang: language.English})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = tr.LoadYAML(language.English, []byte(`hi: "Hi {0}!"`))
 	_ = tr.LoadYAML(language.German, []byte(`hi: "Hallo {0}!"`))
 	_ = tr.Start(context.Background(), &tg.Client{})
@@ -177,7 +201,10 @@ func TestTranslate(t *testing.T) {
 }
 
 func TestHears(t *testing.T) {
-	tr := NewTranslator(&Config{DefaultLang: language.English})
+	tr, err := NewTranslator(&Config{DefaultLang: language.English})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = tr.LoadYAML(language.English, []byte(`btn: "Submit"`))
 	_ = tr.LoadYAML(language.German, []byte(`btn: "Absenden"`))
 	_ = tr.Start(context.Background(), &tg.Client{})
@@ -208,7 +235,10 @@ func TestHears(t *testing.T) {
 }
 
 func TestPluginInterface(t *testing.T) {
-	tr := NewTranslator(&Config{DefaultLang: language.English})
+	tr, err := NewTranslator(&Config{DefaultLang: language.English})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if tr.Name() != "i18n" {
 		t.Errorf("name = %q", tr.Name())
 	}
