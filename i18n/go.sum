@@ -5,8 +5,8 @@ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORN
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
-github.com/mtgo-labs/mtgo v0.8.0 h1:CFtNXCY0Y5N5+N0BzzFaCrweYqnH3G1tJ7hI1w5/Efo=
-github.com/mtgo-labs/mtgo v0.8.0/go.mod h1:S7NWS71niPpXfDJiH9HsPM5ST3wcKusdeJCv6tveVR8=
+github.com/mtgo-labs/mtgo v0.9.0 h1:scd1Jk49x7RGIwwoyGU3nNPwMvGovuqWVthw2acPk4o=
+github.com/mtgo-labs/mtgo v0.9.0/go.mod h1:S7NWS71niPpXfDJiH9HsPM5ST3wcKusdeJCv6tveVR8=
 github.com/mtgo-labs/storage v0.4.0 h1:vfZGeLSrPux45y6S3PTtpQ302fEZxlItuzC2HRfTKl8=
 github.com/mtgo-labs/storage v0.4.0/go.mod h1:sBMyZUmM0laJr1Zx4bAyYeQ6jpMCZJ64WPHcL8kNj70=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
