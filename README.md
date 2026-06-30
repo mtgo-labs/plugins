@@ -11,6 +11,8 @@ Official plugin collection for [mtgo](https://github.com/mtgo-labs/mtgo) — a G
 | [**scheduler**](./scheduler) | In-memory job scheduler with retry/backoff, bounded concurrency, and graceful shutdown |
 | [**fsm**](./fsm) | Finite-state-machine and key-value state management with TTL, scoping, and persistent storage |
 | [**throttle**](./throttle) | Local anti-spam rate limiting with global, per-chat, per-user, per-method, and custom-key scopes |
+| [**updatesrecovery**](./updatesrecovery) | Persist and restore Telegram update state (pts/qts/date/seq) with gap detection and `getDifference` recovery |
+| [**rawdebug**](./rawdebug) | Optional raw MTProto traffic inspector for development and debugging (RPC, updates, errors, redaction) |
 
 ## Usage
 
