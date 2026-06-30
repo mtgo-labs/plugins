@@ -8,6 +8,9 @@ Official plugin collection for [mtgo](https://github.com/mtgo-labs/mtgo) — a G
 |--------|-------------|
 | [**conversations**](./conversations) | Multi-step conversation state management with persistent storage |
 | [**i18n**](./i18n) | Internationalization with YAML/FTL formats and 25+ plural rules |
+| [**scheduler**](./scheduler) | In-memory job scheduler with retry/backoff, bounded concurrency, and graceful shutdown |
+| [**fsm**](./fsm) | Finite-state-machine and key-value state management with TTL, scoping, and persistent storage |
+| [**throttle**](./throttle) | Local anti-spam rate limiting with global, per-chat, per-user, per-method, and custom-key scopes |
 
 ## Usage
 
