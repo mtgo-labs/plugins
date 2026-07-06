@@ -3,13 +3,13 @@ module github.com/mtgo-labs/plugins/i18n
 go 1.26.2
 
 require (
-	github.com/mtgo-labs/mtgo v0.12.0
+	github.com/mtgo-labs/mtgo v0.12.1
 	golang.org/x/text v0.38.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	github.com/klauspost/compress v1.18.7 // indirect
+	github.com/klauspost/compress v1.19.0 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mtgo-labs/storage v0.5.0 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
