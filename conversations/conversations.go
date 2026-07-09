@@ -174,7 +174,7 @@ func (p *Plugin) Start(ctx context.Context, client *tg.Client) error {
 					cc.client.Log.Errorf("conversation %q panic: %v", cc.name, r)
 				}
 			}()
-			fn(cc)
+			_ = fn(cc)
 		}(ek, fn, cc)
 	}
 
@@ -248,7 +248,7 @@ func (p *Plugin) Enter(name string, ctx *tg.Context) error {
 			p.mu.Unlock()
 			_ = p.store.Delete(StoreKey{ChatID: chatID, UserID: userID})
 		}()
-		fn(cc)
+		_ = fn(cc)
 	})
 
 	return nil
