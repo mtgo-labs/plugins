@@ -43,11 +43,13 @@ client.Use(updatesrecovery.New(updatesrecovery.Storage(store, "my_bot")))
 ### Options
 
 ```go
-// Immediate gap recovery (no debounce).
+// Immediate gap recovery (no debounce), cap iterations, skip reconnect recovery.
 client.Use(updatesrecovery.New(
     updatesrecovery.Storage(store, "my_bot"),
     updatesrecovery.WithGapBuffer(0),
     updatesrecovery.WithSaveInterval(5 * time.Second),
+    updatesrecovery.WithMaxIterations(50),
+    updatesrecovery.WithSkipReconnectRecovery(true),
     updatesrecovery.WithLogger(slog.Default()),
 ))
 ```
@@ -56,6 +58,8 @@ client.Use(updatesrecovery.New(
 |--------|---------|-------------|
 | `WithSaveInterval(d)` | 2s | Debounce interval for persisting state. Set to 0 for immediate saves. |
 | `WithGapBuffer(d)` | 500ms | Delay before calling `getDifference` after a gap. Set to 0 for immediate recovery. |
+| `WithMaxIterations(n)` | 100 | Max `getDifference` loop iterations per recovery. 0 = unlimited. |
+| `WithSkipReconnectRecovery(b)` | false | Skip gap recovery on reconnect (bandwidth saver for userbots). |
 | `WithLogger(l)` | `slog.Default()` | Structured logger for diagnostics. |
 
 ### In-memory store (testing / ephemeral)

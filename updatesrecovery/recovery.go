@@ -53,9 +53,11 @@ type differenceRPC interface {
  }
 
 type options struct {
-	saveInterval time.Duration
-	gapBuffer    time.Duration
-	log          *slog.Logger
+	saveInterval  time.Duration
+	gapBuffer     time.Duration
+	maxIterations int
+	skipReconnect bool
+	log           *slog.Logger
 }
 
 // Option configures the plugin.
@@ -75,6 +77,21 @@ func WithGapBuffer(d time.Duration) Option {
 	return func(o *options) { o.gapBuffer = d }
 }
 
+// WithMaxIterations caps the number of getDifference loop iterations during
+// gap recovery. Each iteration fetches up to 100 missed updates. A value of 0
+// means unlimited (fetch the entire backlog). Default is 100.
+func WithMaxIterations(n int) Option {
+	return func(o *options) { o.maxIterations = n }
+}
+
+// WithSkipReconnectRecovery disables gap recovery on reconnect. When true, the
+// plugin still tracks and persists state, but does not call getDifference to
+// fetch updates missed during the disconnect. This reduces bandwidth for
+// use cases where stale updates are not needed.
+func WithSkipReconnectRecovery(skip bool) Option {
+	return func(o *options) { o.skipReconnect = skip }
+}
+
 // WithLogger sets a structured logger for diagnostic messages.
 func WithLogger(l *slog.Logger) Option {
 	return func(o *options) { o.log = l }
@@ -88,8 +105,9 @@ func WithLogger(l *slog.Logger) Option {
 // for feature-flagging recovery without changing call sites.
 func New(store Store, opts ...Option) *Plugin {
 	o := options{
-		saveInterval: 2 * time.Second,
-		gapBuffer:    500 * time.Millisecond,
+		saveInterval:  2 * time.Second,
+		gapBuffer:     500 * time.Millisecond,
+		maxIterations: 100,
 	}
 	for _, fn := range opts {
 		fn(&o)
@@ -233,9 +251,9 @@ func (p *Plugin) onUpdateReceived(_ *telegram.Client, updates tg.UpdatesClass) {
 }
 
 // onReconnect is the OnReconnect hook. It triggers gap recovery to fetch
-// updates missed during the disconnect.
+// updates missed during the disconnect, unless skipReconnect is set.
 func (p *Plugin) onReconnect(client *telegram.Client) {
-	if p.store == nil {
+	if p.store == nil || p.opts.skipReconnect {
 		return
 	}
 	go p.recoverAccount(context.Background(), "reconnect")
@@ -308,7 +326,8 @@ func (p *Plugin) recoverAccount(ctx context.Context, reason string) {
 
 	p.log.Debug("updates-recovery: starting gap recovery", "reason", reason)
 
-	for {
+	maxIter := p.opts.maxIterations
+	for iter := 0; maxIter == 0 || iter < maxIter; iter++ {
 		p.mu.RLock()
 		pts, date, qts := p.state.Pts, p.state.Date, p.state.Qts
 		p.mu.RUnlock()
@@ -336,6 +355,8 @@ func (p *Plugin) recoverAccount(ctx context.Context, reason string) {
 			return
 		}
 	}
+	p.log.Warn("updates-recovery: hit iteration cap", "iterations", maxIter)
+	p.signalSave()
 }
 
 // applyDifference processes one getDifference response, dispatching recovered
