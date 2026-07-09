@@ -11,6 +11,7 @@ import (
 	telegram "github.com/mtgo-labs/mtgo/telegram"
 	"github.com/mtgo-labs/mtgo/tg"
 )
+
 // Plugin persists and recovers Telegram update state (pts, qts, date, seq).
 // It implements the [tg.Plugin] interface and is registered via
 // [client.Use].
@@ -26,17 +27,19 @@ type Plugin struct {
 	log    *slog.Logger
 
 	// In-memory state protected by mu.
-	mu     sync.RWMutex
-	state  State
+	mu       sync.RWMutex
+	state    State
 	hasState bool // true after first state is established (loaded or fetched)
 
 	// Debounced persistence.
 	saveCh chan struct{} // signal: state changed, persist soon
 	stopCh chan struct{}
-	done   chan struct{}
+	wg     sync.WaitGroup
 
 	// Gap recovery single-flight.
 	recovering atomic.Bool
+	// Idle watchdog: last update timestamp (unix seconds).
+	lastUpdate atomic.Int64
 
 	// Gap buffer timer (debounces getDifference calls).
 	gapTimer   *time.Timer
@@ -44,7 +47,7 @@ type Plugin struct {
 
 	// rpc is the RPC client used for getDifference. Defaults to client.Raw()
 	// in Start; tests can set it directly via setRPC.
-	rpc differenceRPC
+	rpc      differenceRPC
 	channels *channelManager
 }
 
@@ -59,6 +62,7 @@ type options struct {
 	gapBuffer     time.Duration
 	maxIterations int
 	skipReconnect bool
+	idleTimeout   time.Duration
 	log           *slog.Logger
 }
 
@@ -94,6 +98,13 @@ func WithSkipReconnectRecovery(skip bool) Option {
 	return func(o *options) { o.skipReconnect = skip }
 }
 
+// WithIdleTimeout sets the idle watchdog interval. If no updates arrive within
+// this duration, the plugin assumes a server-side update stall and triggers
+// gap recovery via getDifference. Default is 15 minutes. Set to 0 to disable.
+func WithIdleTimeout(d time.Duration) Option {
+	return func(o *options) { o.idleTimeout = d }
+}
+
 // WithLogger sets a structured logger for diagnostic messages.
 func WithLogger(l *slog.Logger) Option {
 	return func(o *options) { o.log = l }
@@ -110,6 +121,7 @@ func New(store Store, opts ...Option) *Plugin {
 		saveInterval:  2 * time.Second,
 		gapBuffer:     500 * time.Millisecond,
 		maxIterations: 100,
+		idleTimeout:   15 * time.Minute,
 	}
 	for _, fn := range opts {
 		fn(&o)
@@ -152,7 +164,11 @@ func (p *Plugin) Start(ctx context.Context, client *telegram.Client) error {
 	// Start debounced save goroutine.
 	p.saveCh = make(chan struct{}, 1)
 	p.stopCh = make(chan struct{})
-	go p.saveLoop()
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.saveLoop()
+	}()
 
 	// Initialize channel manager for per-channel gap recovery.
 	var channelStore ChannelStore
@@ -170,6 +186,21 @@ func (p *Plugin) Start(ctx context.Context, client *telegram.Client) error {
 	client.OnUpdateReceived(p.onUpdateReceived)
 	client.OnReconnect(p.onReconnect)
 
+	// Start idle update watchdog (if enabled).
+	if p.opts.idleTimeout > 0 {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			p.idleWatchdog(ctx)
+		}()
+	}
+
+	// Register invoker middleware to capture pts feedback from RPC responses
+	// (messages.affectedMessages, messages.affectedHistory).
+	client.UseInvokerMiddleware(func(next tg.Invoker) tg.Invoker {
+		return &affectedInvoker{next: next, plugin: p}
+	})
+
 	// If we have saved state, recover any updates missed while offline.
 	if p.hasState {
 		go p.recoverAccount(ctx, "restart")
@@ -184,8 +215,13 @@ func (p *Plugin) Stop(ctx context.Context) error {
 		return nil
 	}
 	close(p.stopCh)
+	waitDone := make(chan struct{})
+	go func() {
+		p.wg.Wait()
+		close(waitDone)
+	}()
 	select {
-	case <-p.done:
+	case <-waitDone:
 	case <-ctx.Done():
 	}
 
@@ -209,6 +245,8 @@ func (p *Plugin) onUpdateReceived(_ *telegram.Client, updates tg.UpdatesClass) {
 	if p.store == nil {
 		return
 	}
+	// Update last-received timestamp for the idle watchdog.
+	p.lastUpdate.Store(time.Now().UnixNano())
 
 	// Process channel-scoped updates for per-channel gap detection.
 	if p.channels != nil {
@@ -228,6 +266,7 @@ func (p *Plugin) onUpdateReceived(_ *telegram.Client, updates tg.UpdatesClass) {
 		var aggInfo updateInfo
 		aggInfo.date = info.date
 		aggInfo.seq = info.seq
+		aggInfo.seqStart = info.seqStart
 		for _, upd := range items {
 			m := extractUpdateMeta(upd)
 			mergeMeta(&aggInfo, &m)
@@ -249,6 +288,17 @@ func (p *Plugin) onUpdateReceived(_ *telegram.Client, updates tg.UpdatesClass) {
 	if !hasState {
 		p.advanceState(info)
 		return
+	}
+
+	// Seq-based gap detection for Updates/UpdatesCombined batches.
+	if info.seq > 0 {
+		switch classifySeq(cur, info) {
+		case gapSeq:
+			p.triggerGapRecovery(context.Background(), "seq-gap")
+			return
+		case gapDuplicate:
+			return // entire batch is stale
+		}
 	}
 
 	// Classify against current state.
@@ -449,7 +499,6 @@ func (p *Plugin) dispatchRecovered(messages []tg.MessageClass, updates []tg.Upda
 // --- debounced persistence ---
 
 func (p *Plugin) saveLoop() {
-	defer close(p.done)
 	interval := p.opts.saveInterval
 	if interval <= 0 {
 		interval = 2 * time.Second
@@ -497,4 +546,78 @@ func (p *Plugin) State() State {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.state
+}
+
+// idleWatchdog periodically checks whether updates have stopped arriving.
+// If no update is received within idleTimeout, it triggers gap recovery
+// to catch server-side update stalls.
+func (p *Plugin) idleWatchdog(ctx context.Context) {
+	checkInterval := time.Minute
+	if p.opts.idleTimeout > 0 && p.opts.idleTimeout < 3*checkInterval {
+		checkInterval = p.opts.idleTimeout / 3
+	}
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-p.stopCh:
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			last := p.lastUpdate.Load()
+			if last == 0 {
+				continue
+			}
+			elapsed := time.Since(time.Unix(0, last))
+			if elapsed > p.opts.idleTimeout {
+				p.log.Debug("updates-recovery: idle timeout, triggering recovery",
+					"idle", elapsed.String(), "timeout", p.opts.idleTimeout.String())
+				p.triggerGapRecovery(context.Background(), "idle-timeout")
+			}
+		}
+	}
+}
+
+// HandleAffected feeds pts feedback from RPC responses (e.g. from
+// messages.readHistory, messages.deleteMessages) into the update state.
+// Without this, local pts desyncs after mutations that the server confirms
+// with a pts bump but no corresponding update.
+//
+// When the plugin is registered via [Client.Use], this is called automatically
+// via an invoker middleware. It is also safe to call manually after RPC calls
+// that return messages.affectedMessages or messages.affectedHistory.
+func (p *Plugin) HandleAffected(result tg.TLObject) {
+	if p.store == nil {
+		return
+	}
+	switch r := result.(type) {
+	case *tg.MessagesAffectedMessages:
+		if r.PTS > 0 {
+			p.advanceState(updateInfo{pts: r.PTS, ptsCount: r.PTSCount})
+		}
+	case *tg.MessagesAffectedHistory:
+		if r.PTS > 0 {
+			p.advanceState(updateInfo{pts: r.PTS, ptsCount: r.PTSCount})
+		}
+	}
+}
+
+// affectedInvoker wraps a tg.Invoker to capture pts feedback from RPC
+// responses containing messages.affectedMessages or messages.affectedHistory.
+type affectedInvoker struct {
+	next   tg.Invoker
+	plugin *Plugin
+}
+
+func (a *affectedInvoker) RPCInvoke(ctx context.Context, input tg.TLObject, decode func(*tg.Reader) (tg.TLObject, error)) (tg.TLObject, error) {
+	result, err := a.next.RPCInvoke(ctx, input, decode)
+	if err == nil {
+		a.plugin.HandleAffected(result)
+	}
+	return result, err
+}
+
+func (a *affectedInvoker) RPCInvokeRaw(ctx context.Context, input tg.TLObject) ([]byte, error) {
+	return a.next.RPCInvokeRaw(ctx, input)
 }

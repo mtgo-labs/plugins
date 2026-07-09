@@ -13,19 +13,20 @@ type gapKind int
 const (
 	gapNone      gapKind = iota // update is in sequence
 	gapDuplicate                // update was already applied
-	gapAccount                  // pts/qts/seq gap — updates were missed
+	gapAccount                  // pts/qts gap — updates were missed
+	gapSeq                      // seq_start gap — batched updates were missed
 )
 
 // updateInfo holds the sequence-relevant fields extracted from an update batch
 // or individual update.
 type updateInfo struct {
-	pts        int32
-	ptsCount   int32
-	qts        int32
-	seq        int32
-	seqStart   int32
-	date       int32
-	channelID  int64
+	pts       int32
+	ptsCount  int32
+	qts       int32
+	seq       int32
+	seqStart  int32
+	date      int32
+	channelID int64
 }
 
 // extractBatch extracts update info from a top-level tg.UpdatesClass.
@@ -168,6 +169,33 @@ func classifyAccount(state State, info updateInfo) gapKind {
 		return gapNone
 	}
 	return gapNone
+}
+
+// classifySeq checks the seq/seqStart fields of an incoming batch against the
+// stored state. For UpdatesCombined, seqStart is compared against state.Seq+1.
+// For plain Updates (no seqStart), seq is compared directly.
+func classifySeq(state State, info updateInfo) gapKind {
+	if info.seq == 0 {
+		return gapNone
+	}
+	if info.seqStart > 0 {
+		switch {
+		case info.seqStart > state.Seq+1:
+			return gapSeq
+		case info.seqStart <= state.Seq:
+			return gapDuplicate
+		default:
+			return gapNone
+		}
+	}
+	switch {
+	case info.seq > state.Seq+1:
+		return gapSeq
+	case info.seq <= state.Seq:
+		return gapDuplicate
+	default:
+		return gapNone
+	}
 }
 
 func readInt32(v reflect.Value, name string) int32 {

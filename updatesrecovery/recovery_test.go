@@ -23,9 +23,9 @@ func (failingStore) LoadState() (*State, error) {
 
 // fakeRPC implements differenceRPC for gap-recovery tests.
 type fakeRPC struct {
-	mu     sync.Mutex
-	diffs  []tg.DifferenceClass
-	calls  int32
+	mu      sync.Mutex
+	diffs   []tg.DifferenceClass
+	calls   int32
 	lastReq *tg.UpdatesGetDifferenceRequest
 }
 
@@ -49,7 +49,7 @@ func (f *fakeRPC) UpdatesGetChannelDifference(_ context.Context, _ *tg.UpdatesGe
 func newTestPlugin(t *testing.T, store Store, opts ...Option) *Plugin {
 	t.Helper()
 	p := New(store, opts...)
-	p.opts.gapBuffer = 0 // disable gap buffering for immediate recovery in tests
+	p.opts.gapBuffer = 0    // disable gap buffering for immediate recovery in tests
 	p.opts.saveInterval = 0 // save immediately (flush on every signal)
 	return p
 }
@@ -146,10 +146,7 @@ func TestDetectPtsGap(t *testing.T) {
 	// Gap recovery should have been triggered (runs in a goroutine).
 	// Wait for it to complete.
 	deadline := time.After(2 * time.Second)
-	for {
-		if atomic.LoadInt32(&rpc.calls) > 0 {
-			break
-		}
+	for atomic.LoadInt32(&rpc.calls) == 0 {
 		select {
 		case <-deadline:
 			t.Fatalf("getDifference was not called (calls=%d)", atomic.LoadInt32(&rpc.calls))
@@ -246,10 +243,7 @@ func TestUpdatesTooLongTriggersRecovery(t *testing.T) {
 	p.onUpdateReceived(nil, &tg.UpdatesTooLong{})
 
 	deadline := time.After(2 * time.Second)
-	for {
-		if atomic.LoadInt32(&rpc.calls) > 0 {
-			break
-		}
+	for atomic.LoadInt32(&rpc.calls) == 0 {
 		select {
 		case <-deadline:
 			t.Fatal("UpdatesTooLong did not trigger getDifference")
@@ -510,4 +504,9 @@ func (b *blockingRPC) UpdatesGetChannelDifference(_ context.Context, _ *tg.Updat
 	return &tg.UpdatesChannelDifferenceEmpty{Final: true}, nil
 }
 
-func (b *blockingRPC) unblock() { b.once.Do(func() {}); if b.unblockCh != nil { close(b.unblockCh) } }
+func (b *blockingRPC) unblock() {
+	b.once.Do(func() {})
+	if b.unblockCh != nil {
+		close(b.unblockCh)
+	}
+}

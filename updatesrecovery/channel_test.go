@@ -200,7 +200,6 @@ func TestChannelStorePersistence(t *testing.T) {
 	}
 }
 
-
 func TestChannelManagerLoadPersisted(t *testing.T) {
 	store := newTestChannelStore()
 	_ = store.SaveChannelState(100, 0xabc, 55)
