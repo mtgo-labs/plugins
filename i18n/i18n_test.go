@@ -210,7 +210,7 @@ func TestHears(t *testing.T) {
 	_ = tr.Start(context.Background(), &tg.Client{})
 
 	enCtx := &tg.Context{
-		Update: &tg.Update{Users: map[int64]*types.User{1: {ID: 1, Language: "en"}}},
+		Update:  &tg.Update{Users: map[int64]*types.User{1: {ID: 1, Language: "en"}}},
 		Message: &types.Message{FromID: 1, Text: "Submit"},
 	}
 	if !tr.Hears("btn")(enCtx) {
@@ -218,7 +218,7 @@ func TestHears(t *testing.T) {
 	}
 
 	deCtx := &tg.Context{
-		Update: &tg.Update{Users: map[int64]*types.User{1: {ID: 1, Language: "de"}}},
+		Update:  &tg.Update{Users: map[int64]*types.User{1: {ID: 1, Language: "de"}}},
 		Message: &types.Message{FromID: 1, Text: "Absenden"},
 	}
 	if !tr.Hears("btn")(deCtx) {
@@ -226,7 +226,7 @@ func TestHears(t *testing.T) {
 	}
 
 	wrongCtx := &tg.Context{
-		Update: &tg.Update{Users: map[int64]*types.User{1: {ID: 1, Language: "en"}}},
+		Update:  &tg.Update{Users: map[int64]*types.User{1: {ID: 1, Language: "en"}}},
 		Message: &types.Message{FromID: 1, Text: "Other"},
 	}
 	if tr.Hears("btn")(wrongCtx) {

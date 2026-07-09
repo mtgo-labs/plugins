@@ -357,7 +357,7 @@ func (p *Plugin) write(line string) {
 		line = scrub(line)
 	}
 	p.mu.Lock()
-	fmt.Fprintln(p.cfg.Writer, line)
+	_, _ = fmt.Fprintln(p.cfg.Writer, line)
 	p.mu.Unlock()
 }
 

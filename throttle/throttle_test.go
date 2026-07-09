@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -385,7 +385,7 @@ func TestCustomKeyThrottle(t *testing.T) {
 	var callCount atomic.Int64
 	th := New(Config{
 		Rules: []Rule{{
-			Name: "custom",
+			Name:  "custom",
 			Scope: ScopeCustom,
 			Key: func(_ context.Context, input tg.TLObject) string {
 				callCount.Add(1)
@@ -567,7 +567,6 @@ func TestErrThrottledErrorString(t *testing.T) {
 		t.Errorf("Error() = %q, should contain rule and scope", s)
 	}
 }
-
 
 // ---------------------------------------------------------------------------
 // Wait mode behavior

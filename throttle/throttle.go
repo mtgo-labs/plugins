@@ -46,8 +46,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mtgo-labs/mtgo/tg"
 	telegram "github.com/mtgo-labs/mtgo/telegram"
+	"github.com/mtgo-labs/mtgo/tg"
 )
 
 // ---------------------------------------------------------------------------
@@ -621,7 +621,7 @@ func findPeerFieldIndex(input tg.TLObject) int {
 	if t == nil {
 		return peerIdxNone
 	}
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct {

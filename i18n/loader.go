@@ -84,7 +84,7 @@ func (t *Translator) loadContent(lang language.Tag, content []byte) {
 	case FormatFTL:
 		t.loadFTLLocked(lang, string(content))
 	default:
-		t.loadYAMLLocked(lang, content)
+		_ = t.loadYAMLLocked(lang, content)
 	}
 }
 
