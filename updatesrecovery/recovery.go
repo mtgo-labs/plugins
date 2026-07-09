@@ -45,12 +45,14 @@ type Plugin struct {
 	// rpc is the RPC client used for getDifference. Defaults to client.Raw()
 	// in Start; tests can set it directly via setRPC.
 	rpc differenceRPC
+	channels *channelManager
 }
 
 // differenceRPC is the minimal interface for update gap recovery.
 type differenceRPC interface {
 	UpdatesGetDifference(ctx context.Context, req *tg.UpdatesGetDifferenceRequest) (tg.DifferenceClass, error)
- }
+	UpdatesGetChannelDifference(ctx context.Context, req *tg.UpdatesGetChannelDifferenceRequest) (tg.ChannelDifferenceClass, error)
+}
 
 type options struct {
 	saveInterval  time.Duration
@@ -150,8 +152,19 @@ func (p *Plugin) Start(ctx context.Context, client *telegram.Client) error {
 	// Start debounced save goroutine.
 	p.saveCh = make(chan struct{}, 1)
 	p.stopCh = make(chan struct{})
-	p.done = make(chan struct{})
 	go p.saveLoop()
+
+	// Initialize channel manager for per-channel gap recovery.
+	var channelStore ChannelStore
+	if cs, ok := p.store.(ChannelStore); ok {
+		channelStore = cs
+	}
+	p.channels = newChannelManager(channelStore, nil, p.log, p.dispatchRecovered)
+
+	// Load persisted channel states.
+	if err := p.channels.loadPersisted(); err != nil {
+		p.log.Warn("updates-recovery: load channel states failed", "error", err)
+	}
 
 	// Register lifecycle hooks.
 	client.OnUpdateReceived(p.onUpdateReceived)
@@ -195,6 +208,11 @@ func (p *Plugin) Stop(ctx context.Context) error {
 func (p *Plugin) onUpdateReceived(_ *telegram.Client, updates tg.UpdatesClass) {
 	if p.store == nil {
 		return
+	}
+
+	// Process channel-scoped updates for per-channel gap detection.
+	if p.channels != nil {
+		p.channels.processIncoming(updates)
 	}
 
 	info, tooLong, items := extractBatch(updates)
@@ -257,6 +275,9 @@ func (p *Plugin) onReconnect(client *telegram.Client) {
 		return
 	}
 	go p.recoverAccount(context.Background(), "reconnect")
+	if p.channels != nil {
+		p.channels.recoverAll(context.Background())
+	}
 }
 
 // advanceState updates the in-memory state and signals the save goroutine.
@@ -322,6 +343,9 @@ func (p *Plugin) recoverAccount(ctx context.Context, reason string) {
 	}
 	if p.rpc == nil {
 		return
+	}
+	if p.channels != nil && p.channels.rpc == nil {
+		p.channels.rpc = p.rpc
 	}
 
 	p.log.Debug("updates-recovery: starting gap recovery", "reason", reason)

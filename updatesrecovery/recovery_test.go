@@ -42,6 +42,10 @@ func (f *fakeRPC) UpdatesGetDifference(_ context.Context, req *tg.UpdatesGetDiff
 	return d, nil
 }
 
+func (f *fakeRPC) UpdatesGetChannelDifference(_ context.Context, _ *tg.UpdatesGetChannelDifferenceRequest) (tg.ChannelDifferenceClass, error) {
+	return &tg.UpdatesChannelDifferenceEmpty{Final: true}, nil
+}
+
 func newTestPlugin(t *testing.T, store Store, opts ...Option) *Plugin {
 	t.Helper()
 	p := New(store, opts...)
@@ -500,6 +504,10 @@ func (b *blockingRPC) UpdatesGetDifference(_ context.Context, _ *tg.UpdatesGetDi
 	b.once.Do(func() { b.unblockCh = make(chan struct{}) })
 	<-b.unblockCh
 	return b.diffs[0], nil
+}
+
+func (b *blockingRPC) UpdatesGetChannelDifference(_ context.Context, _ *tg.UpdatesGetChannelDifferenceRequest) (tg.ChannelDifferenceClass, error) {
+	return &tg.UpdatesChannelDifferenceEmpty{Final: true}, nil
 }
 
 func (b *blockingRPC) unblock() { b.once.Do(func() {}); if b.unblockCh != nil { close(b.unblockCh) } }

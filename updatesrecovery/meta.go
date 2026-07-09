@@ -19,12 +19,13 @@ const (
 // updateInfo holds the sequence-relevant fields extracted from an update batch
 // or individual update.
 type updateInfo struct {
-	pts      int32
-	ptsCount int32
-	qts      int32
-	seq      int32
-	seqStart int32
-	date     int32
+	pts        int32
+	ptsCount   int32
+	qts        int32
+	seq        int32
+	seqStart   int32
+	date       int32
+	channelID  int64
 }
 
 // extractBatch extracts update info from a top-level tg.UpdatesClass.
@@ -101,6 +102,7 @@ func extractUpdateMeta(upd tg.UpdateClass) updateInfo {
 	info.qts = readInt32(v, "QTS")
 	info.seq = readInt32(v, "Seq")
 	info.seqStart = readInt32(v, "SeqStart")
+	info.channelID = readInt64(v, "ChannelID")
 	return info
 }
 
@@ -175,6 +177,17 @@ func readInt32(v reflect.Value, name string) int32 {
 	}
 	if f.Kind() == reflect.Int32 {
 		return int32(f.Int())
+	}
+	return 0
+}
+
+func readInt64(v reflect.Value, name string) int64 {
+	f := v.FieldByName(name)
+	if !f.IsValid() {
+		return 0
+	}
+	if f.Kind() == reflect.Int64 {
+		return f.Int()
 	}
 	return 0
 }

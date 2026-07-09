@@ -32,6 +32,8 @@
 package updatesrecovery
 
 import (
+	"sync"
+
 	"github.com/mtgo-labs/storage"
 )
 
@@ -107,7 +109,9 @@ func (a *storageAdapter) LoadState() (*State, error) {
 func NewMemoryStore() Store { return &memoryStore{} }
 
 type memoryStore struct {
-	state *State
+	mu       sync.Mutex
+	state    *State
+	channels map[int64]ChannelState
 }
 
 func (m *memoryStore) SaveState(s *State) error {
@@ -122,4 +126,54 @@ func (m *memoryStore) LoadState() (*State, error) {
 	}
 	cp := *m.state
 	return &cp, nil
+}
+
+// ChannelState holds the per-channel pts that the plugin tracks for
+// gap detection and recovery via getChannelDifference.
+type ChannelState struct {
+	ChannelID  int64
+	PTS        int32
+	AccessHash int64
+}
+
+// ChannelStore is an optional interface for persisting per-channel update
+// state. If the Store provided to [New] also implements ChannelStore,
+// channel pts survives restarts; otherwise it is tracked in-memory only.
+type ChannelStore interface {
+	// SaveChannelState persists the pts and access hash for a channel.
+	SaveChannelState(channelID, accessHash int64, pts int32) error
+	// LoadAllChannelStates returns all persisted channel states.
+	LoadAllChannelStates() ([]ChannelState, error)
+	// DeleteChannelState removes a channel from persistent storage
+	// (e.g. on CHANNEL_PRIVATE).
+	DeleteChannelState(channelID int64) error
+}
+
+// --- ChannelStore methods on memoryStore ---
+
+func (m *memoryStore) SaveChannelState(channelID, accessHash int64, pts int32) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.channels == nil {
+		m.channels = make(map[int64]ChannelState)
+	}
+	m.channels[channelID] = ChannelState{ChannelID: channelID, PTS: pts, AccessHash: accessHash}
+	return nil
+}
+
+func (m *memoryStore) LoadAllChannelStates() ([]ChannelState, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]ChannelState, 0, len(m.channels))
+	for _, cs := range m.channels {
+		result = append(result, cs)
+	}
+	return result, nil
+}
+
+func (m *memoryStore) DeleteChannelState(channelID int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.channels, channelID)
+	return nil
 }
