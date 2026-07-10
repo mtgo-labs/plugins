@@ -45,6 +45,9 @@ type Plugin struct {
 	gapTimer   *time.Timer
 	gapTimerMu sync.Mutex
 
+	// Postponed updates: small-gap updates buffered for a brief window.
+	postponed postponedBuffer
+
 	// rpc is the RPC client used for getDifference. Defaults to client.Raw()
 	// in Start; tests can set it directly via setRPC.
 	rpc      differenceRPC
@@ -58,12 +61,13 @@ type differenceRPC interface {
 }
 
 type options struct {
-	saveInterval  time.Duration
-	gapBuffer     time.Duration
-	maxIterations int
-	skipReconnect bool
-	idleTimeout   time.Duration
-	log           *slog.Logger
+	saveInterval      time.Duration
+	gapBuffer         time.Duration
+	maxIterations     int
+	skipReconnect     bool
+	idleTimeout       time.Duration
+	postponeThreshold int
+	log               *slog.Logger
 }
 
 // Option configures the plugin.
@@ -81,6 +85,16 @@ func WithSaveInterval(d time.Duration) Option {
 // recovery.
 func WithGapBuffer(d time.Duration) Option {
 	return func(o *options) { o.gapBuffer = d }
+}
+
+// WithPostponeThreshold sets the maximum pts gap size that is postponed for a
+// brief buffer window before triggering getDifference. Small gaps (< threshold)
+// are buffered for gapBuffer duration; if the missing updates arrive within
+// that window they are applied normally, avoiding an expensive RPC. Gaps >=
+// threshold trigger immediate recovery. Default is 3. Set to 0 to disable
+// postponement (all gaps recover immediately via the gapBuffer debounce).
+func WithPostponeThreshold(n int) Option {
+	return func(o *options) { o.postponeThreshold = n }
 }
 
 // WithMaxIterations caps the number of getDifference loop iterations during
@@ -118,10 +132,11 @@ func WithLogger(l *slog.Logger) Option {
 // for feature-flagging recovery without changing call sites.
 func New(store Store, opts ...Option) *Plugin {
 	o := options{
-		saveInterval:  2 * time.Second,
-		gapBuffer:     500 * time.Millisecond,
-		maxIterations: 100,
-		idleTimeout:   15 * time.Minute,
+		saveInterval:      2 * time.Second,
+		gapBuffer:         500 * time.Millisecond,
+		maxIterations:     100,
+		idleTimeout:       15 * time.Minute,
+		postponeThreshold: 3,
 	}
 	for _, fn := range opts {
 		fn(&o)
@@ -235,6 +250,8 @@ func (p *Plugin) Stop(ctx context.Context) error {
 	}
 	p.gapTimerMu.Unlock()
 
+	p.clearPostponed()
+
 	return nil
 }
 
@@ -308,13 +325,21 @@ func (p *Plugin) onUpdateReceived(_ *telegram.Client, updates tg.UpdatesClass) {
 	case gapDuplicate:
 		return
 	case gapAccount:
-		// Do NOT advance state — the gap will be recovered via
-		// getDifference, which fetches all updates from the current
-		// state to the gap point and updates state accordingly.
+		// Small pts gaps may self-resolve when the missing updates arrive
+		// shortly after. Buffer the update and start a deadline timer.
+		if info.pts > 0 && p.shouldPostpone(info.pts-cur.Pts) {
+			p.addPostponed(info)
+			return
+		}
+		// Large pts gap (or qts/seq gap): recovery will fetch everything,
+		// so discard any previously postponed updates.
+		p.clearPostponed()
 		p.triggerGapRecovery(context.Background(), "pts-gap")
 		return
 	case gapNone:
 		p.advanceState(info)
+		// A subsequent update may have filled a previously-postponed gap.
+		p.tryApplyPostponed()
 	}
 }
 
@@ -378,6 +403,107 @@ func (p *Plugin) triggerGapRecovery(ctx context.Context, reason string) {
 		p.gapTimerMu.Unlock()
 		p.recoverAccount(ctx, reason)
 	})
+}
+
+// postponedUpdate holds an update that arrived with a small pts gap, buffered
+// pending the missing updates that would fill the gap.
+type postponedUpdate struct {
+	info updateInfo
+}
+
+// postponedBuffer stores updates that arrived with a small pts gap, giving
+// them a brief window (gapBuffer) for the missing updates to arrive. If the
+// gap fills within that window the updates are applied normally, avoiding an
+// expensive getDifference RPC.
+type postponedBuffer struct {
+	mu      sync.Mutex
+	updates []postponedUpdate
+	timer   *time.Timer
+}
+
+// shouldPostpone returns true if a pts gap is small enough to buffer rather
+// than immediately triggering recovery. Requires both postponeThreshold > 0
+// and gapBuffer > 0.
+func (p *Plugin) shouldPostpone(gap int32) bool {
+	return p.opts.postponeThreshold > 0 &&
+		p.opts.gapBuffer > 0 &&
+		gap > 0 && gap < int32(p.opts.postponeThreshold)
+}
+
+// addPostponed buffers an update and (re)starts the deadline timer.
+func (p *Plugin) addPostponed(info updateInfo) {
+	p.postponed.mu.Lock()
+	defer p.postponed.mu.Unlock()
+
+	p.postponed.updates = append(p.postponed.updates, postponedUpdate{info: info})
+
+	if p.postponed.timer != nil {
+		p.postponed.timer.Reset(p.opts.gapBuffer)
+		return
+	}
+	p.postponed.timer = time.AfterFunc(p.opts.gapBuffer, p.onPostponeDeadline)
+}
+
+// tryApplyPostponed checks whether any buffered updates are now in-sequence
+// (because a subsequent update filled the gap) and applies them. Returns the
+// number of updates consumed (applied or recognized as stale duplicates).
+func (p *Plugin) tryApplyPostponed() int {
+	p.postponed.mu.Lock()
+	defer p.postponed.mu.Unlock()
+
+	if len(p.postponed.updates) == 0 {
+		return 0
+	}
+
+	consumed := 0
+	for _, pu := range p.postponed.updates {
+		p.mu.RLock()
+		kind := classifyAccount(p.state, pu.info)
+		p.mu.RUnlock()
+		if kind == gapAccount {
+			break // still gapped
+		}
+		if kind == gapNone {
+			p.advanceState(pu.info)
+		}
+		// gapDuplicate: already covered — consume without advancing.
+		consumed++
+	}
+
+	if consumed > 0 {
+		p.postponed.updates = p.postponed.updates[consumed:]
+		if len(p.postponed.updates) == 0 && p.postponed.timer != nil {
+			p.postponed.timer.Stop()
+			p.postponed.timer = nil
+		}
+	}
+	return consumed
+}
+
+// onPostponeDeadline fires when the buffer window expires without the gap
+// being filled. It clears the buffer and triggers recovery.
+func (p *Plugin) onPostponeDeadline() {
+	p.postponed.mu.Lock()
+	n := len(p.postponed.updates)
+	p.postponed.updates = nil
+	p.postponed.timer = nil
+	p.postponed.mu.Unlock()
+
+	if n == 0 {
+		return // gap was already filled
+	}
+	p.recoverAccount(context.Background(), "postponed-gap-timeout")
+}
+
+// clearPostponed empties the buffer and cancels the deadline timer.
+func (p *Plugin) clearPostponed() {
+	p.postponed.mu.Lock()
+	if p.postponed.timer != nil {
+		p.postponed.timer.Stop()
+		p.postponed.timer = nil
+	}
+	p.postponed.updates = nil
+	p.postponed.mu.Unlock()
 }
 
 // recoverAccount calls updates.getDifference in a loop until all missed
