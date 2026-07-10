@@ -32,6 +32,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 
 	tg "github.com/mtgo-labs/mtgo/telegram"
@@ -243,6 +244,9 @@ func (p *Plugin) Enter(name string, ctx *tg.Context) error {
 
 	p.wg.Go(func() {
 		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("conversations: handler panic name=%s chat_id=%d user_id=%d: %v", name, chatID, userID, r)
+			}
 			p.mu.Lock()
 			delete(p.active, key)
 			p.mu.Unlock()
