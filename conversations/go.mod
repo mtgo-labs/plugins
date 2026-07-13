@@ -3,7 +3,7 @@ module github.com/mtgo-labs/plugins/conversations
 go 1.26.2
 
 require (
-	github.com/mtgo-labs/mtgo v0.14.0
+	github.com/mtgo-labs/mtgo v0.14.3
 	github.com/mtgo-labs/storage v0.5.0
 )
 
