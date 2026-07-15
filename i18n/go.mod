@@ -3,7 +3,7 @@ module github.com/mtgo-labs/plugins/i18n
 go 1.26.2
 
 require (
-	github.com/mtgo-labs/mtgo v0.15.0
+	github.com/mtgo-labs/mtgo v0.15.1
 	golang.org/x/text v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
 )
