@@ -5,8 +5,8 @@ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORN
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
-github.com/mtgo-labs/mtgo v0.16.1 h1:mndFRqbQp7Z5exiYmMIkk6ovArpAMhQTSvRVO9FCfyQ=
-github.com/mtgo-labs/mtgo v0.16.1/go.mod h1:Ic/iVnNWuKAee/FTsA23MCuasar3aEeA2hmdm1BIEzc=
+github.com/mtgo-labs/mtgo v0.18.0 h1:OassfJUbV/3FB7MoDiDQpNfW1b77Mimv6bnnEdnWtgY=
+github.com/mtgo-labs/mtgo v0.18.0/go.mod h1:Ic/iVnNWuKAee/FTsA23MCuasar3aEeA2hmdm1BIEzc=
 github.com/mtgo-labs/session-converter v0.5.0 h1:NO2uPzSaxed7t1+snRLtRopC5jhmlTDwkj0wJcV+lGY=
 github.com/mtgo-labs/session-converter v0.5.0/go.mod h1:C7Ox25A0ZAIngpbZxUs9a1UA/FBGI5Jsq95MjFB4plw=
 github.com/mtgo-labs/storage v0.5.0 h1:x6asAZcLpfhqxEjR6kP4l42246R9XodZGawXsLWLuq8=
